@@ -95,6 +95,19 @@ class Target:
 
         random.shuffle(self.ports)
 
+    @property
+    def notable_ports(self):
+        # TODO: nmap does something smart where a closed or filtered port
+        # is considered notable if its status is a minority
+        if self.status == Target.Status.DOWN:
+            return []
+
+        return [
+            target_port
+            for target_port in self.ports
+            if target_port.status == TargetPort.Status.OPEN
+        ]
+
     def dns_probe(self):
         self.hostname = self._dns_probe()
         logger.debug(
@@ -111,13 +124,13 @@ class Target:
 
         return hostname
 
-    def probe(self):
-        self.status = self._probe()
+    def ping_probe(self):
+        self.status = self._ping_probe()
         logger.debug(
-            "target probe complete: host=%s status=%s", self.host, self.status
+            "target ping probe complete: host=%s status=%s", self.host, self.status
         )
 
-    def _probe(self) -> Status:
+    def _ping_probe(self) -> Status:
         result = ping(self.host, count=1, privileged=False)
         return Target.Status.UP if result.is_alive else Target.Status.DOWN
 
@@ -128,25 +141,12 @@ class Target:
             f"Host is {self.status.value}",
         ]
 
-        # TODO: nmap does something smart where a closed or filtered port
-        # is considered notable if its status is a minority
-        # TODO: Move this to a property
-        notable_ports = (
-            [
-                target_port
-                for target_port in self.ports
-                if target_port.status == TargetPort.Status.OPEN
-            ]
-            if self.status == Target.Status.UP
-            else []
-        )
-
-        if not notable_ports:
+        if not self.notable_ports:
             lines.append("All ports filtered or closed")
         else:
             # TODO: Fix spacing
             lines.append("\t".join(("port", "service", "status")))
-            for target_port in notable_ports:
+            for target_port in self.notable_ports:
                 # TODO: Move this to TargetPort
                 port = f"tcp/{target_port.port}"
                 try:
@@ -171,16 +171,16 @@ class TargetPort:
         self.port = port
         self.status = None
 
-    def probe(self):
-        self.status = self._probe()
+    def connect_probe(self):
+        self.status = self._connect_probe()
         logger.debug(
-            "target port probe complete: host=%s port=%d status=%s",
+            "target port connect probe complete: host=%s port=%d status=%s",
             self.host,
             self.port,
             self.status,
         )
 
-    def _probe(self) -> Status:
+    def _connect_probe(self) -> Status:
         # Nmap has much more sophisticated logic here
         # Ref: https://github.com/nmap/nmap/blob/df33da47228e3f32f9a332f7db0a0a4f2f14084d/scan_engine_connect.cc#L190-L267
         try:
@@ -226,30 +226,30 @@ def main(
             _ = future.result()
 
         # Host discovery
-        host_probe_futures = {}
+        ping_probe_futures = {}
 
         for target in targets:
-            host_probe_futures[executor.submit(target.probe)] = target
+            ping_probe_futures[executor.submit(target.ping_probe)] = target
 
-        for future in as_completed(host_probe_futures):
+        for future in as_completed(ping_probe_futures):
             _ = future.result()
-            target = host_probe_futures[future]
+            target = ping_probe_futures[future]
             if target.status == Target.Status.UP:
                 typer.echo(f"Host {target.host} is up")
 
         # Port scan
-        port_probe_futures = {}
+        connect_probe_futures = {}
         for target in targets:
             if target.status == Target.Status.DOWN:
                 continue
             for target_port in target.ports:
-                port_probe_futures[
-                    executor.submit(target_port.probe)
+                connect_probe_futures[
+                    executor.submit(target_port.connect_probe)
                 ] = target_port
 
-        for future in as_completed(port_probe_futures):
+        for future in as_completed(connect_probe_futures):
             _ = future.result()
-            target_port = port_probe_futures[future]
+            target_port = connect_probe_futures[future]
             if target_port.status == TargetPort.Status.OPEN:
                 typer.echo(
                     f"Discovered open port tcp/{target_port.port} on {target_port.host}"
