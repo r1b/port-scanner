@@ -11,8 +11,7 @@ Ensure that pyenv and pyenv-virtualenv are available on your machine.
 
 ## Usage
 
- - `port-scanner scanme.nmap.org`
- - See `port-scanner --help` for full documentation
+ - See `port-scanner --help`
 
 ## Tests
 
