@@ -3,7 +3,7 @@ import random
 import socket
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from enum import Enum
-from ipaddress import IPv4Network, IPv6Network, ip_network
+from ipaddress import ip_network
 from typing import Iterable, List, Optional
 
 import typer
@@ -50,7 +50,7 @@ def parse_ports(port_specs: str) -> Iterable[int]:
     return [i for i in range(1, MAX_PORT + 1) if target_ports[i]]
 
 
-def parse_hostname(hostname: str) -> IPv4Network | IPv6Network:
+def parse_hostname(hostname: str) -> str:
     addrinfos = socket.getaddrinfo(hostname, None, proto=socket.IPPROTO_TCP)
     # Don't prefer IPv4 or IPv6 - just take the first result
     sockinfo = addrinfos[0][-1]
@@ -58,7 +58,7 @@ def parse_hostname(hostname: str) -> IPv4Network | IPv6Network:
     return address
 
 
-def parse_targets(network_specs: List[str], port_spec: str):
+def parse_targets(network_specs: List[str], port_spec: str) -> List["Target"]:
     targets = []
     ports = parse_ports(port_spec)
 
@@ -95,6 +95,22 @@ class Target:
 
         random.shuffle(self.ports)
 
+    def dns_probe(self):
+        self.hostname = self._dns_probe()
+        logger.debug(
+            "rdns probe complete: host=%s hostname=%s",
+            self.host,
+            self.hostname,
+        )
+
+    def _dns_probe(self) -> Optional[str]:
+        try:
+            hostname, _, _ = socket.gethostbyaddr(self.host)
+        except OSError:
+            hostname = None
+
+        return hostname
+
     def probe(self):
         self.status = self._probe()
         logger.debug(
@@ -114,6 +130,7 @@ class Target:
 
         # TODO: nmap does something smart where a closed or filtered port
         # is considered notable if its status is a minority
+        # TODO: Move this to a property
         notable_ports = (
             [
                 target_port
@@ -130,6 +147,7 @@ class Target:
             # TODO: Fix spacing
             lines.append("\t".join(("port", "service", "status")))
             for target_port in notable_ports:
+                # TODO: Move this to TargetPort
                 port = f"tcp/{target_port.port}"
                 try:
                     service = socket.getservbyport(target_port.port, "tcp")
@@ -197,7 +215,15 @@ def main(
     # Ref: https://github.com/nmap/nmap/blob/df33da47228e3f32f9a332f7db0a0a4f2f14084d/scan_engine.cc#L2779-L2807
     # TODO(perf): Use select / epoll
     with ThreadPoolExecutor(MAX_WORKERS) as executor:
-        # TODO: rDNS
+        # rDNS
+        dns_probe_futures = {}
+
+        for target in targets:
+            if not target.hostname:
+                dns_probe_futures[executor.submit(target.dns_probe)] = target
+
+        for future in as_completed(dns_probe_futures):
+            _ = future.result()
 
         # Host discovery
         host_probe_futures = {}

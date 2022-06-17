@@ -16,6 +16,6 @@ Ensure that pyenv and pyenv-virtualenv are available on your machine.
 - [x] Host discovery with icmplib
 - [x] Multiple network specs and multiple port specs
 - [x] Display original hostname if resolved
-- [ ] Support rDNS
+- [x] Support rDNS
 - [x] Randomize port order - still report in requested order
 - [x] Parse /etc/services and display corresponding service
