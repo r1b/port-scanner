@@ -9,6 +9,7 @@ from typing import Iterable, List, Optional
 import typer
 from icmplib import ping
 
+COL_PADDING = 2
 CONNECT_TIMEOUT_SECONDS = 2
 MIN_PORT = 1
 MAX_PORT = 65535
@@ -127,7 +128,9 @@ class Target:
     def ping_probe(self):
         self.status = self._ping_probe()
         logger.debug(
-            "target ping probe complete: host=%s status=%s", self.host, self.status
+            "target ping probe complete: host=%s status=%s",
+            self.host,
+            self.status,
         )
 
     def _ping_probe(self) -> Status:
@@ -144,17 +147,15 @@ class Target:
         if not self.notable_ports:
             lines.append("All ports filtered or closed")
         else:
-            # TODO: Fix spacing
-            lines.append("\t".join(("port", "service", "status")))
+            table_lines = [("port", "service", "status")]
             for target_port in self.notable_ports:
-                # TODO: Move this to TargetPort
-                port = f"tcp/{target_port.port}"
-                try:
-                    service = socket.getservbyport(target_port.port, "tcp")
-                except OSError:
-                    service = "unknown"
-                status = target_port.status
-                lines.append("\t".join((port, service, status.value)))
+                table_lines.append(target_port.report())
+            col_width = (
+                max(len(word) for line in table_lines for word in line)
+                + COL_PADDING
+            )
+            for line in table_lines:
+                lines.append("".join(word.ljust(col_width) for word in line))
             lines.append("All other ports filtered or closed")
 
         return "\n".join(lines)
@@ -198,6 +199,14 @@ class TargetPort:
             pass
 
         return TargetPort.Status.OPEN
+
+    def report(self) -> Iterable[str]:
+        port = f"tcp/{self.port}"
+        try:
+            service = socket.getservbyport(self.port, "tcp")
+        except OSError:
+            service = "unknown"
+        return port, service, self.status.value
 
 
 @cli.command()
