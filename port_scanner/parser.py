@@ -1,6 +1,8 @@
+import json
 import socket
 from ipaddress import ip_network
-from typing import Iterable, List
+from pathlib import Path
+from typing import Iterable, List, Optional
 
 from port_scanner.target import Target
 
@@ -30,7 +32,14 @@ def parse_targets(network_specs: List[str], port_spec: str) -> List[Target]:
     return targets
 
 
-def parse_ports(port_specs: str) -> Iterable[int]:
+def parse_ports(port_specs: Optional[str]) -> Iterable[int]:
+    if port_specs is None:
+        with (
+            Path(__file__).parent / "assets" / "most_common_ports.json"
+        ).open() as most_common_ports:
+            # Ref: https://nullsec.us/top-1-000-tcp-and-udp-ports-nmap-default/
+            return json.load(most_common_ports)
+
     target_ports = [False for _ in range(MAX_PORT + 1)]
 
     for port_spec in port_specs.split(","):

@@ -9,7 +9,7 @@ setup(
     author_email="robert.cole.jensen@gmail.com",
     license="BSD",
     packages=find_packages(),
-    # package_data={"fourmat": ("assets/*.*", "assets/.*")},
+    package_data={"port-scanner": ["assets/*.*"]},
     install_requires=(
         "icmplib",
         "typer",

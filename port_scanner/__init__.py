@@ -15,7 +15,7 @@ logger = logging.getLogger("port-scanner")
 def main(
     networks: List[str],
     debug: bool = typer.Option(False, "-d"),  # noqa B008
-    ports: str = typer.Option(..., "-p"),  # noqa B008
+    ports: str = typer.Option(None, "-p"),  # noqa B008
 ):
     if debug:
         logger.setLevel(logging.DEBUG)
