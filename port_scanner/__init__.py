@@ -1,4 +1,5 @@
 import logging
+import random
 import socket
 from concurrent.futures import as_completed, ThreadPoolExecutor
 from enum import Enum
@@ -74,6 +75,8 @@ class Target:
         self.ports = [TargetPort(host, port) for port in ports]
         self.status = None
 
+        random.shuffle(self.ports)
+
     def probe(self):
         self.status = self._probe()
         logger.debug("target probe complete: host=%s status=%s", self.host, self.status)
@@ -85,6 +88,8 @@ class Target:
     def report(self) -> str:
         lines = [f"Host report for {self.host}", f"Host is {self.status.value}"]
 
+        # TODO: nmap does something smart where a closed or filtered port
+        # is considered notable if its status is a minority
         notable_ports = [
             target_port for target_port in self.ports
             if target_port.status == TargetPort.Status.OPEN
@@ -93,6 +98,7 @@ class Target:
         if not notable_ports:
             lines.append("All ports filtered or closed")
         else:
+            # TODO: Fix spacing
             lines.append("\t".join(("port", "service", "status")))
             for target_port in notable_ports:
                 port = f"tcp/{target_port.port}"
