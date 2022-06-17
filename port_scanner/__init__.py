@@ -2,7 +2,7 @@ import logging
 import socket
 from concurrent.futures import as_completed, ThreadPoolExecutor
 from enum import Enum
-from ipaddress import ip_network
+from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network, ip_network
 from typing import Iterable, List
 
 import typer
@@ -19,7 +19,7 @@ logging.basicConfig()
 logger = logging.getLogger("port-scanner")
 
 
-def parse_ports(ports: List[str]) -> Iterable[int]:
+def parse_ports(ports: str) -> Iterable[int]:
     if ports is None:
         return range(MIN_PORT, MAX_PORT + 1)
 
@@ -41,7 +41,7 @@ def parse_ports(ports: List[str]) -> Iterable[int]:
     return range(min_port, max_port + 1)
 
 
-def parse_hostname(hostname):
+def parse_hostname(hostname) -> IPv4Network | IPv6Network:
     addrinfos = socket.getaddrinfo(hostname, None, proto=socket.IPPROTO_TCP)
     # Don't prefer IPv4 or IPv6 - just take the first result
     sockinfo = addrinfos[0][-1]
@@ -49,11 +49,11 @@ def parse_hostname(hostname):
     return ip_network(address)
 
 
-def parse_network(network):
+def parse_network(network) -> Iterable[IPv4Address | IPv6Address]:
     try:
-        return ip_network(network)
+        return ip_network(network).hosts()
     except ValueError:
-        return parse_hostname(network)
+        return parse_hostname(network).hosts()
 
 
 class Target:
@@ -75,7 +75,7 @@ class Target:
         return Target.Status.UP if result.is_alive else Target.Status.DOWN
 
     def report(self) -> str:
-        lines = [f"Host report for {self.host}:", f"Host is {self.status.value}"]
+        lines = [f"Host report for {self.host}", f"Host is {self.status.value}"]
 
         notable_ports = [
             target_port for target_port in self.ports
@@ -83,7 +83,7 @@ class Target:
         ] if self.status == Target.Status.UP else []
 
         if not notable_ports:
-            lines.append("All ports filtered")
+            lines.append("All ports filtered or closed")
         else:
             lines.append("\t".join(("port", "service", "status")))
             for target_port in notable_ports:
@@ -131,16 +131,19 @@ class TargetPort:
 
 
 @cli.command()
-def main(network: str, debug: bool = typer.Option(False, "--debug"), ports: str = None):
+def main(
+    networks: List[str],
+    debug: bool = typer.Option(False, "-d"),
+    ports: str = typer.Option(None, "-p")
+):
     if debug:
         logger.setLevel(logging.DEBUG)
 
-    network = parse_network(network)
+    hosts = [str(host) for network in networks for host in parse_network(network)]
     ports = parse_ports(ports)
 
     targets = {}
-    for host in network.hosts():
-        host = str(host)
+    for host in hosts:
         targets[host] = Target(host, ports)
 
     # TODO: Restructure the main loop to support rate limiting and other flow control features.
@@ -154,6 +157,7 @@ def main(network: str, debug: bool = typer.Option(False, "--debug"), ports: str 
             host_probe_futures[executor.submit(target.probe)] = target
 
         for future in as_completed(host_probe_futures):
+            _ = future.result()
             target = host_probe_futures[future]
             if target.status == Target.Status.UP:
                 typer.echo(f"Host {target.host} is up")
@@ -167,12 +171,12 @@ def main(network: str, debug: bool = typer.Option(False, "--debug"), ports: str 
                 port_probe_futures[executor.submit(target_port.probe)] = target_port
 
         for future in as_completed(port_probe_futures):
+            _ = future.result()
             target_port = port_probe_futures[future]
             if target_port.status == TargetPort.Status.OPEN:
                 typer.echo(f"Discovered open port tcp/{target_port.port} on {target_port.host}")
 
     # Report results in user-specified order
-    for host in network.hosts():
-        host = str(host)
+    for host in hosts:
         target = targets[host]
         typer.echo(target.report())

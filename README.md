@@ -17,7 +17,7 @@ Ensure that pyenv and pyenv-virtualenv are available on your machine.
 - [ ] Multiple host / network specs and multiple port specs
   - Overlapping ranges are interesting - nmap by default will scan an address each time it is seen (see --unique)
   - Not sure how this works for ports
-- [ ] Support rDNS
+- [ ] Support rDNS - display original hostname if resolved
 - [ ] Randomize host / port order - still report in requested order
 - [x] Parse /etc/services and display corresponding service
 - [ ] Scan delay / max concurrent host connections / other rate limiting
