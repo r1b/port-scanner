@@ -3,6 +3,7 @@ import random
 import socket
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from enum import Enum
+from functools import cached_property
 from ipaddress import ip_network
 from typing import Iterable, List, Optional
 
@@ -94,7 +95,11 @@ class Target:
         self.hostname = hostname
         self.status = None
 
-        random.shuffle(self.ports)
+    @cached_property
+    def shuffled_ports(self):
+        shuffled_ports = self.ports[:]
+        random.shuffle(shuffled_ports)
+        return shuffled_ports
 
     @property
     def notable_ports(self):
@@ -251,7 +256,7 @@ def main(
         for target in targets:
             if target.status == Target.Status.DOWN:
                 continue
-            for target_port in target.ports:
+            for target_port in target.shuffled_ports:
                 connect_probe_futures[
                     executor.submit(target_port.connect_probe)
                 ] = target_port
