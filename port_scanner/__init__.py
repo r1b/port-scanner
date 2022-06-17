@@ -19,26 +19,34 @@ logging.basicConfig()
 logger = logging.getLogger("port-scanner")
 
 
-def parse_ports(ports: str) -> Iterable[int]:
-    if ports is None:
-        return range(MIN_PORT, MAX_PORT + 1)
+def parse_ports(port_specs: str) -> Iterable[int]:
+    target_ports = [False for _ in range(MAX_PORT + 1)]
 
-    if "-" not in ports:
-        ports = [ports, ports]
-    else:
-        ports = ports.split("-")
+    for port_spec in port_specs.split(","):
+        if port_spec == "-":
+            target_ports = [True for _ in range(MAX_PORT + 1)]
+            break
 
-    ports = [int(port) for port in ports]
-    min_port, max_port = ports
+        if "-" in port_spec:
+            port_spec = port_spec.split("-")
+        else:
+            port_spec = [port_spec, port_spec]
 
-    for port in min_port, max_port:
-        if port not in range(MIN_PORT, MAX_PORT + 1):
-            raise ValueError(f"Invalid port: {port}")
+        port_spec = [int(port) for port in port_spec]
+        min_port, max_port = port_spec
 
-    if min_port > max_port:
-        raise ValueError(f"Invalid range: {min_port}-{max_port}")
+        for port in min_port, max_port:
+            if port not in range(MIN_PORT, MAX_PORT + 1):
+                raise ValueError(f"Invalid port: {port}")
 
-    return range(min_port, max_port + 1)
+        if min_port > max_port:
+            raise ValueError(f"Invalid range: {min_port}-{max_port}")
+
+        for i in range(min_port, max_port + 1):
+            target_ports[i] = True
+
+    # port 0 is never allowed
+    return [i for i in range(1, MAX_PORT + 1) if target_ports[i]]
 
 
 def parse_hostname(hostname) -> IPv4Network | IPv6Network:
@@ -134,7 +142,7 @@ class TargetPort:
 def main(
     networks: List[str],
     debug: bool = typer.Option(False, "-d"),
-    ports: str = typer.Option(None, "-p")
+    ports: str = typer.Option(..., "-p")
 ):
     if debug:
         logger.setLevel(logging.DEBUG)
