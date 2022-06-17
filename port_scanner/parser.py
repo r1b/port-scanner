@@ -10,6 +10,14 @@ MIN_PORT = 1
 MAX_PORT = 65535
 
 
+def load_most_common_ports():
+    with (
+        Path(__file__).parent / "assets" / "most_common_ports.json"
+    ).open() as most_common_ports:
+        # Ref: https://nullsec.us/top-1-000-tcp-and-udp-ports-nmap-default/
+        return json.load(most_common_ports)
+
+
 def parse_targets(network_specs: List[str], port_spec: str) -> List[Target]:
     targets = []
     ports = parse_ports(port_spec)
@@ -33,12 +41,9 @@ def parse_targets(network_specs: List[str], port_spec: str) -> List[Target]:
 
 
 def parse_ports(port_specs: Optional[str]) -> Iterable[int]:
+    # TODO: Break this up
     if port_specs is None:
-        with (
-            Path(__file__).parent / "assets" / "most_common_ports.json"
-        ).open() as most_common_ports:
-            # Ref: https://nullsec.us/top-1-000-tcp-and-udp-ports-nmap-default/
-            return json.load(most_common_ports)
+        return load_most_common_ports()
 
     target_ports = [False for _ in range(MAX_PORT + 1)]
 
@@ -48,7 +53,8 @@ def parse_ports(port_specs: Optional[str]) -> Iterable[int]:
             break
 
         if "-" in port_spec:
-            port_spec = port_spec.split("-")
+            lhs, rhs = port_spec.split("-")
+            port_spec = [lhs or str(MIN_PORT), rhs or str(MAX_PORT)]
         else:
             port_spec = [port_spec, port_spec]
 
